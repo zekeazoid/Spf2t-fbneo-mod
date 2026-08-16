@@ -8,16 +8,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout exact known-good FBNeo revision
+      - name: Clone FBNeo libretro source
         run: |
           set -euxo pipefail
-          git init FBNeo
+          git clone --depth 1 https://github.com/libretro/FBNeo.git FBNeo
           cd FBNeo
-          git remote add origin https://github.com/libretro/FBNeo.git
-          git fetch --depth 1 origin 4e6182f1f07c07f4a2af75bf1e459e43dc1f3ee6
-          git checkout --detach FETCH_HEAD
-          test "$(git rev-parse HEAD)" = "4e6182f1f07c07f4a2af75bf1e459e43dc1f3ee6"
-          echo "Pinned FBNeo commit: $(git rev-parse HEAD)"
+          echo "FBNeo commit: $(git rev-parse HEAD)"
 
       - name: Accept modified Puzzle Fighter graphics ROMs
         run: |
@@ -27,7 +23,6 @@ jobs:
 
           driver = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
           s = driver.read_text(encoding="latin-1")
-
           start_marker = "static struct BurnRomInfo Spf2tRomDesc[] = {"
           end_marker = "STD_ROM_PICK(Spf2t)"
           start = s.find(start_marker)
@@ -42,12 +37,8 @@ jobs:
               "pzf.18m": "55a8ed54",
               "pzf.20m": "cb64d5d9",
           }
-
           for rom, crc in changes.items():
-              pattern = re.compile(
-                  r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)',
-                  re.M,
-              )
+              pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
               block, n = pattern.subn(lambda m: m.group(1) + crc + m.group(3), block, count=1)
               if n != 1:
                   raise SystemExit("Could not patch Spf2t " + rom)
@@ -55,17 +46,7 @@ jobs:
 
           s = s[:start] + block + s[end:]
           driver.write_text(s, encoding="latin-1")
-
-          libretro = Path("FBNeo/src/burner/libretro/libretro.cpp")
-          lr = libretro.read_text(encoding="latin-1")
-          version_needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
-          version_replacement = 'sprintf(library_version, "ZEKE-PINNED v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
-          if version_needle not in lr:
-              raise SystemExit("Could not patch core version marker")
-          lr = lr.replace(version_needle, version_replacement, 1)
-          libretro.write_text(lr, encoding="latin-1")
-
-          print("Only ROM CRC acceptance and version label were changed.")
+          print("Only the four Spf2t graphics CRC entries were changed.")
           PY
 
       - name: Setup Android
@@ -79,12 +60,7 @@ jobs:
           set -euxo pipefail
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           cd FBNeo/src/burner/libretro/jni
-          "$ANDROID_NDK_HOME/ndk-build" \
-            NDK_PROJECT_PATH=. \
-            APP_BUILD_SCRIPT=Android.mk \
-            NDK_APPLICATION_MK=Application.mk \
-            APP_ABI=arm64-v8a \
-            -j2
+          "$ANDROID_NDK_HOME/ndk-build" NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk NDK_APPLICATION_MK=Application.mk APP_ABI=arm64-v8a -j2
 
       - name: Find core
         run: |
@@ -92,11 +68,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
-          file out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_romcrc_libretro_android_arm64.so
+          file out/fbneo_zeke_romcrc_libretro_android_arm64.so
 
       - name: Upload core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-pinned-rom-v6
-          path: out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-romcrc-v7
+          path: out/fbneo_zeke_romcrc_libretro_android_arm64.so
