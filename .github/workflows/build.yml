@@ -1,0 +1,70 @@
+name: Build custom FBNeo Android ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone FBNeo
+        run: git clone --depth 1 https://github.com/finalburnneo/FBNeo.git
+
+      - name: Patch Puzzle Fighter CRCs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
+          s = p.read_text()
+
+          changes = {
+              "pzf.14m": "207c96cb",
+              "pzf.16m": "723f651d",
+              "pzf.18m": "9975c7ff",
+              "pzf.20m": "4f411b00"
+          }
+
+          for rom, crc in changes.items():
+              pattern = re.compile(
+                  r'(^[^\n]*"' + re.escape(rom) +
+                  r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)',
+                  re.M
+              )
+              s, n = pattern.subn(
+                  lambda m: m.group(1) + crc + m.group(3),
+                  s,
+                  count=1
+              )
+              if n != 1:
+                  raise SystemExit("Could not patch " + rom)
+
+          p.write_text(s)
+          PY
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Build ARM64 core
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          cd FBNeo
+          make -f makefile.libretro platform=android ARCH=aarch64 -j2
+
+      - name: Find core
+        run: |
+          mkdir -p out
+          CORE=$(find FBNeo -type f -name "*libretro*.so" | head -n1)
+          cp "$CORE" out/fbneo_libretro_android_arm64.so
+
+      - name: Give me the core
+        uses: actions/upload-artifact@v4
+        with:
+          name: fbneo-android-arm64
+          path: out/fbneo_libretro_android_arm64.so
