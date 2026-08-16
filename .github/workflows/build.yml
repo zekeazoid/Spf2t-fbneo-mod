@@ -18,7 +18,7 @@ jobs:
           import re
 
           p = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
-          S = p.read_text(encoding="latin-1")
+          s = p.read_text(encoding="latin-1")
 
           changes = {
               "pzf.14m": "207c96cb",
@@ -40,6 +40,7 @@ jobs:
               )
               if n != 1:
                   raise SystemExit("Could not patch " + rom)
+              print(f"Patched {rom} -> {crc}")
 
           p.write_text(s, encoding="latin-1")
           PY
@@ -59,8 +60,10 @@ jobs:
 
       - name: Find core
         run: |
+          set -e
           mkdir -p out
           CORE=$(find FBNeo -type f -name "*libretro*.so" | head -n1)
+          test -n "$CORE"
           cp "$CORE" out/fbneo_libretro_android_arm64.so
 
       - name: Give me the core
