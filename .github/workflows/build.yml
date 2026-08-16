@@ -8,13 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone FBNeo libretro port
+      - name: Checkout exact known-good FBNeo revision
         run: |
-          git clone --depth 1 https://github.com/libretro/FBNeo.git
+          set -euxo pipefail
+          git init FBNeo
           cd FBNeo
-          echo "Building FBNeo commit: $(git rev-parse HEAD)"
+          git remote add origin https://github.com/libretro/FBNeo.git
+          git fetch --depth 1 origin 4e6182f1f07c07f4a2af75bf1e459e43dc1f3ee6
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "4e6182f1f07c07f4a2af75bf1e459e43dc1f3ee6"
+          echo "Pinned FBNeo commit: $(git rev-parse HEAD)"
 
-      - name: Accept ROM-native monkey graphics set
+      - name: Accept modified Puzzle Fighter graphics ROMs
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -54,13 +59,13 @@ jobs:
           libretro = Path("FBNeo/src/burner/libretro/libretro.cpp")
           lr = libretro.read_text(encoding="latin-1")
           version_needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
-          version_replacement = 'sprintf(library_version, "ZEKE-ROM-MONKEY v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
+          version_replacement = 'sprintf(library_version, "ZEKE-PINNED v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
           if version_needle not in lr:
               raise SystemExit("Could not patch core version marker")
           lr = lr.replace(version_needle, version_replacement, 1)
           libretro.write_text(lr, encoding="latin-1")
 
-          print("No framebuffer hooks. Graphics come from the modified CPS2 ROM data.")
+          print("Only ROM CRC acceptance and version label were changed.")
           PY
 
       - name: Setup Android
@@ -87,11 +92,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_rom_monkey_libretro_android_arm64.so
-          file out/fbneo_zeke_rom_monkey_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
+          file out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
 
       - name: Upload core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-rom-monkey-v5
-          path: out/fbneo_zeke_rom_monkey_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-pinned-rom-v6
+          path: out/fbneo_zeke_pinned_rom_libretro_android_arm64.so
