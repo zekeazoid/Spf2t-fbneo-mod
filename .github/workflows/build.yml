@@ -1,12 +1,11 @@
 name: Build custom FBNeo Android ARM64
 
-on:
-  workflow_dispatch:
+"on":
+  workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Clone FBNeo libretro port
         run: |
@@ -22,14 +21,12 @@ jobs:
 
           driver = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
           s = driver.read_text(encoding="latin-1")
-
           start_marker = "static struct BurnRomInfo Spf2tRomDesc[] = {"
           end_marker = "STD_ROM_PICK(Spf2t)"
           start = s.find(start_marker)
           end = s.find(end_marker, start)
           if start < 0 or end < 0:
               raise SystemExit("Could not locate Spf2tRomDesc block")
-
           block = s[start:end]
           changes = {
               "pzf.14m": "207c96cb",
@@ -37,27 +34,16 @@ jobs:
               "pzf.18m": "9975c7ff",
               "pzf.20m": "4f411b00",
           }
-
           for rom, crc in changes.items():
-              pattern = re.compile(
-                  r'(^[^\n]*"' + re.escape(rom) +
-                  r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)',
-                  re.M,
-              )
-              block, n = pattern.subn(
-                  lambda m: m.group(1) + crc + m.group(3),
-                  block,
-                  count=1,
-              )
+              pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
+              block, n = pattern.subn(lambda m: m.group(1) + crc + m.group(3), block, count=1)
               if n != 1:
                   raise SystemExit("Could not patch Spf2t " + rom)
-
           s = s[:start] + block + s[end:]
           driver.write_text(s, encoding="latin-1")
 
           libretro = Path("FBNeo/src/burner/libretro/libretro.cpp")
           lr = libretro.read_text(encoding="latin-1")
-
           version_needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
           version_replacement = 'sprintf(library_version, "ZEKE-MONKEY v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
           if version_needle not in lr:
@@ -65,67 +51,44 @@ jobs:
           lr = lr.replace(version_needle, version_replacement, 1)
 
           video_needle = '\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'
-          video_replacement = '''	// ZEKE TEST: monkey faces at Puzzle Fighter round-win marker positions.
-	if (pBurnDraw && strcmp(g_driver_name, "spf2t") == 0 &&
-		nBurnPitch > 0 && (nBurnBpp == 2 || nBurnBpp == 4) &&
-		nGameWidth >= 300 && nGameHeight >= 220 &&
-		nBurnPitch >= nGameWidth * nBurnBpp)
-	{
-		static const char* monkey[12] = {
-			"...111111...",
-			"..12222221..",
-			".1233333321.",
-			"123444444321",
-			"123414414321",
-			"123444444321",
-			"123433334321",
-			".1233553321.",
-			"..12333321..",
-			"...122221...",
-			"....1111....",
-			"............"
-		};
+          video_replacement = '''\t// ZEKE TEST: monkey faces at Puzzle Fighter round-win marker positions.
+\tif (pBurnDraw && strcmp(g_driver_name, "spf2t") == 0 && nBurnPitch > 0 && (nBurnBpp == 2 || nBurnBpp == 4) && nGameWidth >= 300 && nGameHeight >= 220 && nBurnPitch >= nGameWidth * nBurnBpp)
+\t{
+\t\tstatic const char* monkey[12] = {
+\t\t\t"...111111...", "..12222221..", ".1233333321.", "123444444321",
+\t\t\t"123414414321", "123444444321", "123433334321", ".1233553321.",
+\t\t\t"..12333321..", "...122221...", "....1111....", "............"
+\t\t};
+\t\tUINT32 pal[6] = { 0 };
+\t\tpal[1] = BurnHighCol(32, 16, 8, 0);
+\t\tpal[2] = BurnHighCol(150, 72, 24, 0);
+\t\tpal[3] = BurnHighCol(255, 184, 112, 0);
+\t\tpal[4] = BurnHighCol(255, 244, 224, 0);
+\t\tpal[5] = BurnHighCol(238, 76, 92, 0);
+\t\tconst int monkey_x[2] = { (150 * nGameWidth) / 384, (222 * nGameWidth) / 384 };
+\t\tconst int monkey_y = nGameHeight - 17;
+\t\tfor (int which = 0; which < 2; which++) {
+\t\t\tfor (int yy = 0; yy < 12; yy++) {
+\t\t\t\tint py = monkey_y + yy;
+\t\t\t\tif (py < 0 || py >= nGameHeight) continue;
+\t\t\t\tUINT8* row = (UINT8*)pBurnDraw + (py * nBurnPitch);
+\t\t\t\tfor (int xx = 0; xx < 12; xx++) {
+\t\t\t\t\tchar c = monkey[yy][xx];
+\t\t\t\t\tif (c == '.') continue;
+\t\t\t\t\tint px = monkey_x[which] + xx;
+\t\t\t\t\tif (px < 0 || px >= nGameWidth) continue;
+\t\t\t\t\tUINT32 color = pal[c - '0'];
+\t\t\t\t\tif (nBurnBpp == 4) ((UINT32*)row)[px] = color;
+\t\t\t\t\telse ((UINT16*)row)[px] = (UINT16)color;
+\t\t\t\t}
+\t\t\t}
+\t\t}
+\t}
 
-		UINT32 pal[6] = { 0 };
-		pal[1] = BurnHighCol(32, 16, 8, 0);
-		pal[2] = BurnHighCol(150, 72, 24, 0);
-		pal[3] = BurnHighCol(255, 184, 112, 0);
-		pal[4] = BurnHighCol(255, 244, 224, 0);
-		pal[5] = BurnHighCol(238, 76, 92, 0);
-
-		const int monkey_x[2] = {
-			(150 * nGameWidth) / 384,
-			(222 * nGameWidth) / 384
-		};
-		const int monkey_y = nGameHeight - 17;
-
-		for (int which = 0; which < 2; which++) {
-			for (int yy = 0; yy < 12; yy++) {
-				int py = monkey_y + yy;
-				if (py < 0 || py >= nGameHeight) continue;
-				UINT8* row = (UINT8*)pBurnDraw + (py * nBurnPitch);
-				for (int xx = 0; xx < 12; xx++) {
-					char c = monkey[yy][xx];
-					if (c == '.') continue;
-					int px = monkey_x[which] + xx;
-					if (px < 0 || px >= nGameWidth) continue;
-					UINT32 color = pal[c - '0'];
-					if (nBurnBpp == 4) {
-						((UINT32*)row)[px] = color;
-					} else {
-						((UINT16*)row)[px] = (UINT16)color;
-					}
-				}
-			}
-		}
-	}
-
-	video_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'''
-
+\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'''
           if video_needle not in lr:
               raise SystemExit("Could not find video output call")
           lr = lr.replace(video_needle, video_replacement, 1)
-
           libretro.write_text(lr, encoding="latin-1")
           print("VERIFIED core marker: ZEKE-MONKEY")
           print("VERIFIED monkey win-marker patch")
@@ -142,12 +105,7 @@ jobs:
           set -euxo pipefail
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           cd FBNeo/src/burner/libretro/jni
-          "$ANDROID_NDK_HOME/ndk-build" \
-            NDK_PROJECT_PATH=. \
-            APP_BUILD_SCRIPT=Android.mk \
-            NDK_APPLICATION_MK=Application.mk \
-            APP_ABI=arm64-v8a \
-            -j2
+          "$ANDROID_NDK_HOME/ndk-build" NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk NDK_APPLICATION_MK=Application.mk APP_ABI=arm64-v8a -j2
 
       - name: Find core
         run: |
