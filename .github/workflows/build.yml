@@ -8,8 +8,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone FBNeo
-        run: git clone --depth 1 https://github.com/finalburnneo/FBNeo.git
+      - name: Clone FBNeo libretro port
+        run: git clone --depth 1 https://github.com/libretro/FBNeo.git
 
       - name: Patch Puzzle Fighter CRCs
         run: |
@@ -53,18 +53,24 @@ jobs:
 
       - name: Build ARM64 core
         run: |
+          set -euxo pipefail
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
-          export PATH="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-          cd FBNeo
-          make -f makefile.libretro platform=android ARCH=aarch64 -j2
+          cd FBNeo/src/burner/libretro
+          "$ANDROID_NDK_HOME/ndk-build" \
+            NDK_PROJECT_PATH=. \
+            APP_BUILD_SCRIPT=jni/Android.mk \
+            NDK_APPLICATION_MK=jni/Application.mk \
+            APP_ABI=arm64-v8a \
+            -j2
 
       - name: Find core
         run: |
-          set -e
+          set -euxo pipefail
           mkdir -p out
-          CORE=$(find FBNeo -type f -name "*libretro*.so" | head -n1)
+          CORE=$(find FBNeo/src/burner/libretro -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
           cp "$CORE" out/fbneo_libretro_android_arm64.so
+          file out/fbneo_libretro_android_arm64.so
 
       - name: Give me the core
         uses: actions/upload-artifact@v4
