@@ -14,7 +14,7 @@ jobs:
           cd FBNeo
           echo "Building FBNeo commit: $(git rev-parse HEAD)"
 
-      - name: Patch Puzzle Fighter CRCs and ZEKE marker
+      - name: Patch Puzzle Fighter CRCs and obvious ZEKE test
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -58,23 +58,26 @@ jobs:
               print("VERIFIED", rom, crc)
 
           s = s[:start] + block + s[end:]
-
-          old_title = "Super Puzzle Fighter II Turbo (USA 960620)"
-          new_title = "Super Puzzle Fighter II Turbo - ZEKE TEST (USA 960620)"
-          if old_title not in s:
-              raise SystemExit("Could not find Puzzle Fighter title string")
-          s = s.replace(old_title, new_title, 1)
           driver.write_text(s, encoding="latin-1")
 
           libretro = Path("FBNeo/src/burner/libretro/libretro.cpp")
           lr = libretro.read_text(encoding="latin-1")
-          needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
-          replacement = 'sprintf(library_version, "ZEKE-TEST v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
-          if needle not in lr:
+
+          version_needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
+          version_replacement = 'sprintf(library_version, "ZEKE-NEGATIVE v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
+          if version_needle not in lr:
               raise SystemExit("Could not patch core version marker")
-          lr = lr.replace(needle, replacement, 1)
+          lr = lr.replace(version_needle, version_replacement, 1)
+
+          video_needle = '\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'
+          video_replacement = '''\t// ZEKE TEST: make Puzzle Fighter unmistakably different by inverting every video byte.\n\t// This is display-only and does not change game logic.\n\tif (pBurnDraw && strcmp(g_driver_name, "spf2t") == 0)\n\t{\n\t\tfor (int y = 0; y < nGameHeight; y++)\n\t\t{\n\t\t\tUINT8* row = (UINT8*)pBurnDraw + (y * nBurnPitch);\n\t\t\tfor (int x = 0; x < nGameWidth * nBurnBpp; x++)\n\t\t\t\trow[x] ^= 0xff;\n\t\t}\n\t}\n\n\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'''
+          if video_needle not in lr:
+              raise SystemExit("Could not find video output call")
+          lr = lr.replace(video_needle, video_replacement, 1)
+
           libretro.write_text(lr, encoding="latin-1")
-          print("VERIFIED core marker: ZEKE-TEST")
+          print("VERIFIED core marker: ZEKE-NEGATIVE")
+          print("VERIFIED Puzzle Fighter inverted-color video test")
           PY
 
       - name: Setup Android
@@ -101,11 +104,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_test_libretro_android_arm64.so
-          file out/fbneo_zeke_test_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_negative_libretro_android_arm64.so
+          file out/fbneo_zeke_negative_libretro_android_arm64.so
 
       - name: Give me the core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-test-v2
-          path: out/fbneo_zeke_test_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-negative-v3
+          path: out/fbneo_zeke_negative_libretro_android_arm64.so
