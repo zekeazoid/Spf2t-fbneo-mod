@@ -32,10 +32,10 @@ jobs:
 
           block = s[start:end]
           changes = {
-              "pzf.14m": "23587935",
-              "pzf.16m": "1e8f4188",
-              "pzf.18m": "55a8ed54",
-              "pzf.20m": "cb64d5d9",
+              "pzf.14m": "207c96cb",
+              "pzf.16m": "723f651d",
+              "pzf.18m": "9975c7ff",
+              "pzf.20m": "4f411b00",
           }
           for rom, crc in changes.items():
               pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
@@ -68,11 +68,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_romcrc_libretro_android_arm64.so
-          file out/fbneo_zeke_romcrc_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
+          file out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
 
       - name: Upload core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-romcrc-v7
-          path: out/fbneo_zeke_romcrc_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-romcrc-v8
+          path: out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
