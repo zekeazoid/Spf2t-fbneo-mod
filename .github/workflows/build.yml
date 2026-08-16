@@ -9,47 +9,72 @@ jobs:
 
     steps:
       - name: Clone FBNeo libretro port
-        run: git clone --depth 1 https://github.com/libretro/FBNeo.git
+        run: |
+          git clone --depth 1 https://github.com/libretro/FBNeo.git
+          cd FBNeo
+          echo "Building FBNeo commit: $(git rev-parse HEAD)"
 
-      - name: Patch Puzzle Fighter CRCs and title marker
+      - name: Patch Puzzle Fighter CRCs and ZEKE marker
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          p = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
-          s = p.read_text(encoding="latin-1")
+          driver = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
+          s = driver.read_text(encoding="latin-1")
 
+          start_marker = "static struct BurnRomInfo Spf2tRomDesc[] = {"
+          end_marker = "STD_ROM_PICK(Spf2t)"
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit("Could not locate Spf2tRomDesc block")
+
+          block = s[start:end]
           changes = {
               "pzf.14m": "207c96cb",
               "pzf.16m": "723f651d",
               "pzf.18m": "9975c7ff",
-              "pzf.20m": "4f411b00"
+              "pzf.20m": "4f411b00",
           }
 
           for rom, crc in changes.items():
               pattern = re.compile(
                   r'(^[^\n]*"' + re.escape(rom) +
                   r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)',
-                  re.M
+                  re.M,
               )
-              s, n = pattern.subn(
+              block, n = pattern.subn(
                   lambda m: m.group(1) + crc + m.group(3),
-                  s,
-                  count=1
+                  block,
+                  count=1,
               )
               if n != 1:
-                  raise SystemExit("Could not patch " + rom)
-              print(f"Patched {rom} -> {crc}")
+                  raise SystemExit("Could not patch Spf2t " + rom)
+
+          for rom, crc in changes.items():
+              if not re.search(r'"' + re.escape(rom) + r'"[^\n]*0x' + crc, block, re.I):
+                  raise SystemExit("Verification failed for " + rom)
+              print("VERIFIED", rom, crc)
+
+          s = s[:start] + block + s[end:]
 
           old_title = "Super Puzzle Fighter II Turbo (USA 960620)"
           new_title = "Super Puzzle Fighter II Turbo - ZEKE TEST (USA 960620)"
           if old_title not in s:
               raise SystemExit("Could not find Puzzle Fighter title string")
           s = s.replace(old_title, new_title, 1)
-          print("Added ZEKE TEST title marker")
+          driver.write_text(s, encoding="latin-1")
 
-          p.write_text(s, encoding="latin-1")
+          libretro = Path("FBNeo/src/burner/libretro/libretro.cpp")
+          lr = libretro.read_text(encoding="latin-1")
+          needle = 'sprintf(library_version, "v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
+          replacement = 'sprintf(library_version, "ZEKE-TEST v%x.%x.%x.%02x %s %s", nBurnVer >> 20, (nBurnVer >> 16) & 0x0F, (nBurnVer >> 8) & 0xFF, nBurnVer & 0xFF, GIT_DATE, GIT_VERSION);'
+          if needle not in lr:
+              raise SystemExit("Could not patch core version marker")
+          lr = lr.replace(needle, replacement, 1)
+          libretro.write_text(lr, encoding="latin-1")
+          print("VERIFIED core marker: ZEKE-TEST")
           PY
 
       - name: Setup Android
@@ -76,11 +101,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_libretro_android_arm64.so
-          file out/fbneo_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_test_libretro_android_arm64.so
+          file out/fbneo_zeke_test_libretro_android_arm64.so
 
       - name: Give me the core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-test
-          path: out/fbneo_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-test-v2
+          path: out/fbneo_zeke_test_libretro_android_arm64.so
