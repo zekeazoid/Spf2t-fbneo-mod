@@ -65,14 +65,70 @@ jobs:
           lr = lr.replace(version_needle, version_replacement, 1)
 
           video_needle = '\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'
-          video_replacement = r'''\t// ZEKE TEST: draw tiny monkey faces over Puzzle Fighter's two arcade round-win markers.\n\t// Deliberately tiny/safe framebuffer writes; game logic is untouched.\n\tif (pBurnDraw && strcmp(g_driver_name, "spf2t") == 0 &&\n\t\tnBurnPitch > 0 && (nBurnBpp == 2 || nBurnBpp == 4) &&\n\t\tnGameWidth >= 300 && nGameHeight >= 220 &&\n\t\tnBurnPitch >= nGameWidth * nBurnBpp)\n\t{\n\t\tstatic const char* monkey[12] = {\n\t\t\t"...111111...",\n\t\t\t"..12222221..",\n\t\t\t".1233333321.",\n\t\t\t"123444444321",\n\t\t\t"123414414321",\n\t\t\t"123444444321",\n\t\t\t"123433334321",\n\t\t\t".1233553321.",\n\t\t\t"..12333321..",\n\t\t\t"...122221...",\n\t\t\t"....1111....",\n\t\t\t"............"\n\t\t};\n\n\t\tUINT32 pal[6];\n\t\tpal[1] = BurnHighCol(32, 16, 8, 0);      // outline\n\t\tpal[2] = BurnHighCol(150, 72, 24, 0);    // brown fur\n\t\tpal[3] = BurnHighCol(255, 184, 112, 0);  // face\n\t\tpal[4] = BurnHighCol(255, 244, 224, 0);  // eyes/muzzle\n\t\tpal[5] = BurnHighCol(238, 76, 92, 0);    // smile\n\n\t\tauto draw_monkey = [&](int ox, int oy) {\n\t\t\tfor (int yy = 0; yy < 12; yy++) {\n\t\t\t\tint py = oy + yy;\n\t\t\t\tif (py < 0 || py >= nGameHeight) continue;\n\t\t\t\tUINT8* row = (UINT8*)pBurnDraw + (py * nBurnPitch);\n\t\t\t\tfor (int xx = 0; xx < 12; xx++) {\n\t\t\t\t\tchar c = monkey[yy][xx];\n\t\t\t\t\tif (c == '.') continue;\n\t\t\t\t\tint px = ox + xx;\n\t\t\t\t\tif (px < 0 || px >= nGameWidth) continue;\n\t\t\t\t\tUINT32 color = pal[c - '0'];\n\t\t\t\t\tif (nBurnBpp == 4) {\n\t\t\t\t\t\t((UINT32*)row)[px] = color;\n\t\t\t\t\t} else {\n\t\t\t\t\t\t((UINT16*)row)[px] = (UINT16)color;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t};\n\n\t\t// Arcade game is 384x224. These land on the two V-shaped round-win markers\n\t\t// under the score panels. Scale horizontally if a frontend reports another width.\n\t\tint left_x  = (150 * nGameWidth) / 384;\n\t\tint right_x = (222 * nGameWidth) / 384;\n\t\tint marker_y = nGameHeight - 17;\n\t\tdraw_monkey(left_x, marker_y);\n\t\tdraw_monkey(right_x, marker_y);\n\t}\n\n\tvideo_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'''
+          video_replacement = '''	// ZEKE TEST: monkey faces at Puzzle Fighter round-win marker positions.
+	if (pBurnDraw && strcmp(g_driver_name, "spf2t") == 0 &&
+		nBurnPitch > 0 && (nBurnBpp == 2 || nBurnBpp == 4) &&
+		nGameWidth >= 300 && nGameHeight >= 220 &&
+		nBurnPitch >= nGameWidth * nBurnBpp)
+	{
+		static const char* monkey[12] = {
+			"...111111...",
+			"..12222221..",
+			".1233333321.",
+			"123444444321",
+			"123414414321",
+			"123444444321",
+			"123433334321",
+			".1233553321.",
+			"..12333321..",
+			"...122221...",
+			"....1111....",
+			"............"
+		};
+
+		UINT32 pal[6] = { 0 };
+		pal[1] = BurnHighCol(32, 16, 8, 0);
+		pal[2] = BurnHighCol(150, 72, 24, 0);
+		pal[3] = BurnHighCol(255, 184, 112, 0);
+		pal[4] = BurnHighCol(255, 244, 224, 0);
+		pal[5] = BurnHighCol(238, 76, 92, 0);
+
+		const int monkey_x[2] = {
+			(150 * nGameWidth) / 384,
+			(222 * nGameWidth) / 384
+		};
+		const int monkey_y = nGameHeight - 17;
+
+		for (int which = 0; which < 2; which++) {
+			for (int yy = 0; yy < 12; yy++) {
+				int py = monkey_y + yy;
+				if (py < 0 || py >= nGameHeight) continue;
+				UINT8* row = (UINT8*)pBurnDraw + (py * nBurnPitch);
+				for (int xx = 0; xx < 12; xx++) {
+					char c = monkey[yy][xx];
+					if (c == '.') continue;
+					int px = monkey_x[which] + xx;
+					if (px < 0 || px >= nGameWidth) continue;
+					UINT32 color = pal[c - '0'];
+					if (nBurnBpp == 4) {
+						((UINT32*)row)[px] = color;
+					} else {
+						((UINT16*)row)[px] = (UINT16)color;
+					}
+				}
+			}
+		}
+	}
+
+	video_cb(pBurnDraw, nGameWidth, nGameHeight, nBurnPitch);'''
+
           if video_needle not in lr:
               raise SystemExit("Could not find video output call")
           lr = lr.replace(video_needle, video_replacement, 1)
 
           libretro.write_text(lr, encoding="latin-1")
           print("VERIFIED core marker: ZEKE-MONKEY")
-          print("VERIFIED monkey win-marker overlay")
+          print("VERIFIED monkey win-marker patch")
           PY
 
       - name: Setup Android
@@ -105,5 +161,5 @@ jobs:
       - name: Give me the core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-monkey-v4
+          name: fbneo-android-arm64-zeke-monkey-v4-fixed
           path: out/fbneo_zeke_monkey_libretro_android_arm64.so
