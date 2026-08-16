@@ -15,7 +15,7 @@ jobs:
           cd FBNeo
           echo "FBNeo commit: $(git rev-parse HEAD)"
 
-      - name: Accept modified Puzzle Fighter graphics ROMs
+      - name: Accept monkey win icon Puzzle Fighter graphics ROMs
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -32,10 +32,10 @@ jobs:
 
           block = s[start:end]
           changes = {
-              "pzf.14m": "207c96cb",
-              "pzf.16m": "723f651d",
-              "pzf.18m": "9975c7ff",
-              "pzf.20m": "4f411b00",
+              "pzf.14m": "99481dca",
+              "pzf.16m": "02e5b706",
+              "pzf.18m": "460dbb7c",
+              "pzf.20m": "e9a6e2e3",
           }
           for rom, crc in changes.items():
               pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
@@ -68,11 +68,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
-          file out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_monkey_winicon_v9_libretro_android_arm64.so
+          file out/fbneo_zeke_monkey_winicon_v9_libretro_android_arm64.so
 
       - name: Upload core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-romcrc-v8
-          path: out/fbneo_zeke_romcrc_v8_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-monkey-winicon-v9
+          path: out/fbneo_zeke_monkey_winicon_v9_libretro_android_arm64.so
