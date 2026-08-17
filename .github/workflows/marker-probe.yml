@@ -20,7 +20,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           driver = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
           s = driver.read_text(encoding="latin-1")
           start_marker = "static struct BurnRomInfo Spf2tRomDesc[] = {"
@@ -29,7 +28,6 @@ jobs:
           end = s.find(end_marker, start)
           if start < 0 or end < 0:
               raise SystemExit("Could not locate Spf2tRomDesc block")
-
           block = s[start:end]
           changes = {
               "pzf.14m": "1377d496",
@@ -43,7 +41,6 @@ jobs:
               if n != 1:
                   raise SystemExit("Could not patch Spf2t " + rom)
               print("ACCEPT", rom, crc)
-
           s = s[:start] + block + s[end:]
           driver.write_text(s, encoding="latin-1")
           PY
@@ -52,27 +49,20 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           p = Path("FBNeo/src/burn/drv/capcom/cps_obj.cpp")
           s = p.read_text(encoding="latin-1")
-
           needle = "\t\t\tnCpstTile = (n & ~0x0F) + (dy << 4) + ((n + dx) & 0x0F);\t// pgear fix\n"
           if s.count(needle) != 1:
               raise SystemExit(f"Expected one CPS2 tile calculation, found {s.count(needle)}")
-
-          inject = needle + r'''
-			// SPF2T marker probe: the left win pip is visually at the bottom-left HUD,
-			// approximately CPS2 screen x=150..170, y=204..223.  WIN-01 already
-			// contains the monkey graphic at decoded tile 0x5C69.  Replacing only
-			// tiles drawn in this small rectangle tells us whether the pip is a CPS2
-			// sprite and gives us a precise coordinate hook without touching gameplay.
-			if (strcmp(BurnDrvGetTextA(DRV_NAME), "spf2t") == 0 &&
-				nCpstX >= 140 && nCpstX <= 176 &&
-				nCpstY >= 204 && nCpstY <= 223) {
-				nCpstTile = 0x5C69;
-			}
-'''
-          s = s.replace(needle, inject, 1)
+          lines = [
+              "\t\t\t// SPF2T marker probe\n",
+              "\t\t\tif (strcmp(BurnDrvGetTextA(DRV_NAME), \"spf2t\") == 0 &&\n",
+              "\t\t\t\tnCpstX >= 140 && nCpstX <= 176 &&\n",
+              "\t\t\t\tnCpstY >= 204 && nCpstY <= 223) {\n",
+              "\t\t\t\tnCpstTile = 0x5C69;\n",
+              "\t\t\t}\n",
+          ]
+          s = s.replace(needle, needle + ''.join(lines), 1)
           p.write_text(s, encoding="latin-1")
           print("Installed SPF2T win-marker coordinate probe -> tile 0x5C69")
           PY
