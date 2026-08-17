@@ -1,0 +1,106 @@
+name: Build SPF2T win-marker probe core
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone FBNeo libretro source
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/libretro/FBNeo.git FBNeo
+          cd FBNeo
+          echo "FBNeo commit: $(git rev-parse HEAD)"
+
+      - name: Accept current WIN-01 Puzzle Fighter graphics ROMs
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          driver = Path("FBNeo/src/burn/drv/capcom/d_cps2.cpp")
+          s = driver.read_text(encoding="latin-1")
+          start_marker = "static struct BurnRomInfo Spf2tRomDesc[] = {"
+          end_marker = "STD_ROM_PICK(Spf2t)"
+          start = s.find(start_marker)
+          end = s.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit("Could not locate Spf2tRomDesc block")
+
+          block = s[start:end]
+          changes = {
+              "pzf.14m": "1377d496",
+              "pzf.16m": "753fc470",
+              "pzf.18m": "38c66c42",
+              "pzf.20m": "796dc257",
+          }
+          for rom, crc in changes.items():
+              pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
+              block, n = pattern.subn(lambda m: m.group(1) + crc + m.group(3), block, count=1)
+              if n != 1:
+                  raise SystemExit("Could not patch Spf2t " + rom)
+              print("ACCEPT", rom, crc)
+
+          s = s[:start] + block + s[end:]
+          driver.write_text(s, encoding="latin-1")
+          PY
+
+      - name: Patch CPS2 draw path for win-marker probe
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("FBNeo/src/burn/drv/capcom/cps_obj.cpp")
+          s = p.read_text(encoding="latin-1")
+
+          needle = "\t\t\tnCpstTile = (n & ~0x0F) + (dy << 4) + ((n + dx) & 0x0F);\t// pgear fix\n"
+          if s.count(needle) != 1:
+              raise SystemExit(f"Expected one CPS2 tile calculation, found {s.count(needle)}")
+
+          inject = needle + r'''
+			// SPF2T marker probe: the left win pip is visually at the bottom-left HUD,
+			// approximately CPS2 screen x=150..170, y=204..223.  WIN-01 already
+			// contains the monkey graphic at decoded tile 0x5C69.  Replacing only
+			// tiles drawn in this small rectangle tells us whether the pip is a CPS2
+			// sprite and gives us a precise coordinate hook without touching gameplay.
+			if (strcmp(BurnDrvGetTextA(DRV_NAME), "spf2t") == 0 &&
+				nCpstX >= 140 && nCpstX <= 176 &&
+				nCpstY >= 204 && nCpstY <= 223) {
+				nCpstTile = 0x5C69;
+			}
+'''
+          s = s.replace(needle, inject, 1)
+          p.write_text(s, encoding="latin-1")
+          print("Installed SPF2T win-marker coordinate probe -> tile 0x5C69")
+          PY
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Build ARM64 core
+        run: |
+          set -euxo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          cd FBNeo/src/burner/libretro/jni
+          "$ANDROID_NDK_HOME/ndk-build" NDK_PROJECT_PATH=. APP_BUILD_SCRIPT=Android.mk NDK_APPLICATION_MK=Application.mk APP_ABI=arm64-v8a -j2
+
+      - name: Find core
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
+          test -n "$CORE"
+          cp "$CORE" out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
+          file out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
+
+      - name: Upload core
+        uses: actions/upload-artifact@v4
+        with:
+          name: fbneo-android-arm64-zeke-marker-probe-v1
+          path: out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
