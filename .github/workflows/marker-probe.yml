@@ -15,7 +15,7 @@ jobs:
           cd FBNeo
           echo "FBNeo commit: $(git rev-parse HEAD)"
 
-      - name: Accept current WIN-01 Puzzle Fighter graphics ROMs
+      - name: Accept verified working Puzzle Fighter graphics ROMs
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -30,10 +30,10 @@ jobs:
               raise SystemExit("Could not locate Spf2tRomDesc block")
           block = s[start:end]
           changes = {
-              "pzf.14m": "1377d496",
-              "pzf.16m": "753fc470",
-              "pzf.18m": "38c66c42",
-              "pzf.20m": "796dc257",
+              "pzf.14m": "207c96cb",
+              "pzf.16m": "723f651d",
+              "pzf.18m": "9975c7ff",
+              "pzf.20m": "4f411b00",
           }
           for rom, crc in changes.items():
               pattern = re.compile(r'(^[^\n]*"' + re.escape(rom) + r'"[^\n]*?0x)([0-9a-fA-F]{8})([^\n]*$)', re.M)
@@ -86,11 +86,11 @@ jobs:
           mkdir -p out
           CORE=$(find FBNeo/src/burner/libretro/jni -type f -path "*/arm64-v8a/*" -name "libretro.so" | head -n1)
           test -n "$CORE"
-          cp "$CORE" out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
-          file out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
+          cp "$CORE" out/fbneo_zeke_marker_probe_v2_libretro_android_arm64.so
+          file out/fbneo_zeke_marker_probe_v2_libretro_android_arm64.so
 
       - name: Upload core
         uses: actions/upload-artifact@v4
         with:
-          name: fbneo-android-arm64-zeke-marker-probe-v1
-          path: out/fbneo_zeke_marker_probe_v1_libretro_android_arm64.so
+          name: fbneo-android-arm64-zeke-marker-probe-v2
+          path: out/fbneo_zeke_marker_probe_v2_libretro_android_arm64.so
